@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { getFlightOptions } from '@/app/exerciseUtils';
 
 interface FlightOption {
@@ -14,53 +14,80 @@ interface FlightOption {
   duration: string;
 }
 
-function FlightBooking() {
-  const [destination, setDestination] = useState('');
-  const [departure, setDeparture] = useState('');
-  const [arrival, setArrival] = useState('');
-  const [passengers, setPassengers] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isError, setIsError] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [flightOptions, setFlightOptions] = useState<FlightOption[]>([]);
-  const [isRoundtrip, setIsRoundtrip] = useState(false);
-  const [selectedFlight, setSelectedFlight] = useState<FlightOption | null>(
-    null
-  );
-  const [totalPrice, setTotalPrice] = useState(0);
+interface FlightData {
+  destination: string;
+  departure: string;
+  arrival: string;
+  passengers: number;
+  isRoundtrip: boolean;
+  selectedFlightId: string | null;
+}
 
-  useEffect(() => {
-    if (selectedFlight) {
-      setTotalPrice(selectedFlight.price * passengers);
-    }
-  }, [selectedFlight, passengers]);
+type FlightState = FlightData &
+  (
+    | {
+        status: 'idle';
+      }
+    | {
+        status: 'submitting';
+        selectedFlightId: null;
+      }
+    | {
+        status: 'error';
+      }
+    | {
+        status: 'success';
+        flights: FlightOption[];
+      }
+  );
+
+function FlightBooking() {
+  const [flightState, setFlightState] = useState<FlightState>({
+    status: 'idle',
+    destination: '',
+    departure: '',
+    arrival: '',
+    passengers: 1,
+    isRoundtrip: false,
+    selectedFlightId: null,
+  });
+
+  const selectedFlight =
+    flightState.status === 'success' && flightState.selectedFlightId
+      ? flightState.flights.find((f) => f.id === flightState.selectedFlightId)
+      : null;
+      
+  const totalPrice = selectedFlight
+    ? selectedFlight.price * flightState.passengers
+    : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    setIsSubmitting(true);
-    setIsError(false);
-    setIsSuccess(false);
-    setSelectedFlight(null);
+    setFlightState((prev) => ({
+      ...prev,
+      status: 'submitting',
+      selectedFlightId: null,
+    }));
 
     try {
-      const flights = await getFlightOptions({
-        destination,
-        departure,
-        arrival,
-        passengers,
-      });
+      const flights = await getFlightOptions(flightState);
 
-      setFlightOptions(flights);
-      setIsSuccess(true);
+      setFlightState((prev) => ({ ...prev, status: 'success', flights }));
     } catch {
-      setIsSubmitting(false);
-      setIsError(true);
+      setFlightState((prev) => ({ ...prev, status: 'error' }));
     }
   };
 
   const handleFlightSelect = (flight: FlightOption) => {
-    setSelectedFlight(flight);
+    setFlightState((prev) =>
+      prev.status === 'success'
+        ? {
+            ...prev,
+            selectedFlightId: flight.id,
+          }
+        : prev
+    );
   };
 
   return (
@@ -71,8 +98,13 @@ function FlightBooking() {
         <div className="flex items-center space-x-2 mb-4">
           <Switch
             id="roundtrip"
-            checked={isRoundtrip}
-            onCheckedChange={setIsRoundtrip}
+            checked={flightState.isRoundtrip}
+            onCheckedChange={(checked) =>
+              setFlightState((prev) => ({
+                ...prev,
+                isRoundtrip: checked,
+              }))
+            }
           />
           <Label htmlFor="roundtrip">Roundtrip flight</Label>
         </div>
@@ -84,8 +116,13 @@ function FlightBooking() {
           <Input
             type="text"
             id="destination"
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
+            value={flightState.destination}
+            onChange={(e) =>
+              setFlightState((prev) => ({
+                ...prev,
+                destination: e.target.value,
+              }))
+            }
             required
           />
         </div>
@@ -97,13 +134,18 @@ function FlightBooking() {
           <Input
             type="date"
             id="departure"
-            value={departure}
-            onChange={(e) => setDeparture(e.target.value)}
+            value={flightState.departure}
+            onChange={(e) =>
+              setFlightState((prev) => ({
+                ...prev,
+                departure: e.target.value,
+              }))
+            }
             required
           />
         </div>
 
-        {isRoundtrip && (
+        {flightState.isRoundtrip && (
           <div>
             <Label htmlFor="arrival" className="block mb-1">
               Return Date
@@ -111,8 +153,13 @@ function FlightBooking() {
             <Input
               type="date"
               id="arrival"
-              value={arrival}
-              onChange={(e) => setArrival(e.target.value)}
+              value={flightState.arrival}
+              onChange={(e) =>
+                setFlightState((prev) => ({
+                  ...prev,
+                  arrival: e.target.value,
+                }))
+              }
               required
             />
           </div>
@@ -125,30 +172,41 @@ function FlightBooking() {
           <Input
             type="number"
             id="passengers"
-            value={passengers}
-            onChange={(e) => setPassengers(parseInt(e.target.value))}
+            value={flightState.passengers}
+            onChange={(e) =>
+              setFlightState((prev) => ({
+                ...prev,
+                passengers: parseInt(e.target.value),
+              }))
+            }
             min="1"
             max="9"
             required
           />
         </div>
 
-        <Button type="submit" disabled={isSubmitting} className="w-full">
-          {isSubmitting ? 'Searching...' : 'Search Flights'}
+        <Button
+          type="submit"
+          disabled={flightState.status === 'submitting'}
+          className="w-full"
+        >
+          {flightState.status === 'submitting'
+            ? 'Searching...'
+            : 'Search Flights'}
         </Button>
       </form>
 
-      {isError && (
+      {flightState.status === 'error' && (
         <div className="mt-4 p-4 bg-red-100 text-red-700 rounded">
           An error occurred while searching for flights. Please try again.
         </div>
       )}
 
-      {isSuccess && flightOptions.length > 0 && (
+      {flightState.status === 'success' && flightState.flights.length > 0 && (
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-4">Available Flights</h2>
           <div className="space-y-4">
-            {flightOptions.map((flight) => (
+            {flightState.flights.map((flight) => (
               <div
                 key={flight.id}
                 className={`p-4 border rounded hover:shadow-md ${
@@ -184,7 +242,7 @@ function FlightBooking() {
           <div className="space-y-2">
             <p>Flight: {selectedFlight.airline}</p>
             <p>Duration: {selectedFlight.duration}</p>
-            <p>Passengers: {passengers}</p>
+            <p>Passengers: {flightState.passengers}</p>
             <p className="text-xl font-bold mt-4">Total: ${totalPrice}</p>
           </div>
         </div>
