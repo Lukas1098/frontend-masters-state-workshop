@@ -4,20 +4,92 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { useState } from 'react';
+import { createContext, ReactNode, use, useReducer, useState } from 'react';
 import { FlightOption, getFlightOptions } from '@/app/exerciseUtils';
 
+type BookingState = {
+  status: 'idle' | 'submitting' | 'error' | 'results';
+  flightOptions: FlightOption[] | null;
+  searchParams: {
+    destination: string;
+    departure: string;
+    arrival: string;
+    passengers: number;
+    isOneWay: boolean;
+  } | null;
+};
+
+const initialBookingState: BookingState = {
+  status: 'idle',
+  flightOptions: null,
+  searchParams: null,
+};
+
+type BookingEvent =
+  | {
+      type: 'submit';
+      payload: {
+        destination: string;
+        departure: string;
+        arrival: string;
+        passengers: number;
+        isOneWay: boolean;
+      };
+    }
+  | {
+      type: 'results';
+      flightOptions: FlightOption[];
+    }
+  | {
+      type: 'back';
+    }
+  | {
+      type: 'error';
+    };
+
+const bookingReducer = (
+  state: BookingState,
+  event: BookingEvent
+): BookingState => {
+  switch (event.type) {
+    case 'submit':
+      return {
+        ...state,
+        status: 'submitting',
+        searchParams: event.payload,
+      };
+    case 'results':
+      return {
+        ...state,
+        status: 'results',
+        flightOptions: event.flightOptions,
+      };
+    case 'back':
+      if (state.status === 'results') {
+        return {
+          ...state,
+          status: 'idle',
+        };
+      }
+      return state;
+    case 'error':
+      return {
+        ...state,
+        status: 'error',
+      };
+    default:
+      return state;
+  }
+};
+
 interface SearchResultsProps {
-  flightOptions: FlightOption[];
-  passengers: number;
   onBack: () => void;
 }
 
-function SearchResults({
-  flightOptions,
-  passengers,
-  onBack,
-}: SearchResultsProps) {
+function SearchResults({ onBack }: SearchResultsProps) {
+  const { state } = use(BookingContext);
+  const flightOptions = state.flightOptions ?? [];
+  const passengers = state.searchParams?.passengers ?? 1;
   const [selectedFlight, setSelectedFlight] = useState<FlightOption | null>(
     null
   );
@@ -78,7 +150,6 @@ function SearchResults({
 
 function BookingForm({
   onSubmit,
-  isSubmitting,
 }: {
   onSubmit: (formData: {
     destination: string;
@@ -87,13 +158,22 @@ function BookingForm({
     passengers: number;
     isOneWay: boolean;
   }) => void;
-  isSubmitting: boolean;
 }) {
-  const [destination, setDestination] = useState('');
-  const [departure, setDeparture] = useState('');
-  const [arrival, setArrival] = useState('');
-  const [passengers, setPassengers] = useState(1);
-  const [isOneWay, setIsOneWay] = useState(false);
+  const { state } = use(BookingContext);
+  const isSubmitting = state.status === 'submitting';
+  const [destination, setDestination] = useState(
+    state.searchParams?.destination ?? ''
+  );
+  const [departure, setDeparture] = useState(
+    state.searchParams?.departure ?? ''
+  );
+  const [arrival, setArrival] = useState(state.searchParams?.arrival ?? '');
+  const [passengers, setPassengers] = useState(
+    state.searchParams?.passengers ?? 1
+  );
+  const [isOneWay, setIsOneWay] = useState(
+    state.searchParams?.isOneWay ?? false
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,18 +256,33 @@ function BookingForm({
   );
 }
 
-export default function Page() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isError, setIsError] = useState(false);
-  const [flightOptions, setFlightOptions] = useState<FlightOption[]>([]);
-  const [showResults, setShowResults] = useState(false);
-  const [searchParams, setSearchParams] = useState<{
-    destination: string;
-    departure: string;
-    arrival: string;
-    passengers: number;
-    isOneWay: boolean;
-  } | null>(null);
+const BookingContext = createContext<{
+  state: BookingState;
+  dispatch: (event: BookingEvent) => void;
+}>(
+  null as unknown as {
+    state: BookingState;
+    dispatch: (event: BookingEvent) => void;
+  }
+);
+
+const BookingProvider = ({ children }: { children: ReactNode }) => {
+  const [bookingState, dispatch] = useReducer(
+    bookingReducer,
+    initialBookingState
+  );
+
+  return (
+    <BookingContext.Provider value={{ state: bookingState, dispatch }}>
+      {children}
+    </BookingContext.Provider>
+  );
+};
+
+function BookingContent() {
+  const { state: bookingState, dispatch } = use(BookingContext);
+  const isError = bookingState.status === 'error';
+  const showResults = bookingState.status === 'results';
 
   const handleSubmit = async (formData: {
     destination: string;
@@ -196,21 +291,16 @@ export default function Page() {
     passengers: number;
     isOneWay: boolean;
   }) => {
-    setIsSubmitting(true);
-    setIsError(false);
-    setSearchParams(formData);
+    dispatch({ type: 'submit', payload: formData });
 
     try {
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       const mockFlights = await getFlightOptions(formData);
-      setFlightOptions(mockFlights);
-      setShowResults(true);
+      dispatch({ type: 'results', flightOptions: mockFlights });
     } catch {
-      setIsError(true);
-    } finally {
-      setIsSubmitting(false);
+      dispatch({ type: 'error' });
     }
   };
 
@@ -220,7 +310,7 @@ export default function Page() {
 
       {!showResults ? (
         <>
-          <BookingForm onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+          <BookingForm onSubmit={handleSubmit} />
           {isError && (
             <div className="mt-4 p-4 bg-red-100 text-red-700 rounded">
               An error occurred while searching for flights. Please try again.
@@ -228,12 +318,16 @@ export default function Page() {
           )}
         </>
       ) : (
-        <SearchResults
-          flightOptions={flightOptions}
-          passengers={searchParams?.passengers || 1}
-          onBack={() => setShowResults(false)}
-        />
+        <SearchResults onBack={() => dispatch({ type: 'back' })} />
       )}
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <BookingProvider>
+      <BookingContent />
+    </BookingProvider>
   );
 }
