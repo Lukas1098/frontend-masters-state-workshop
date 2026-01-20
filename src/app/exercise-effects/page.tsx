@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useReducer, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,117 +20,198 @@ interface Hotel {
   rating: number;
 }
 
+type BookingState = {
+  inputs: {
+    destination: string;
+    startDate: string;
+    endDate: string;
+  };
+  status: 'idle' | 'searchingFlights' | 'searchingHotels' | 'error';
+
+  flights: Flight[];
+  hotels: Hotel[];
+
+  selectedFlightId: string | null;
+  selectedHotelId: string | null;
+
+  error: string | null;
+};
+
+type Action =
+  | { type: 'inputUpdated'; inputs: Partial<BookingState['inputs']> }
+  | { type: 'flightsLoaded'; flights: Flight[] }
+  | { type: 'flightSelected'; flightId: string }
+  | { type: 'hotelsLoaded'; hotels: Hotel[] }
+  | { type: 'hotelSelected'; hotelId: string }
+  | { type: 'error'; error: string };
+
+const initialState: BookingState = {
+  inputs: {
+    destination: '',
+    startDate: '',
+    endDate: '',
+  },
+  status: 'idle',
+  flights: [],
+  hotels: [],
+  selectedFlightId: null,
+  selectedHotelId: null,
+  error: null,
+};
+
+function tripSearchReducer(state: BookingState, action: Action): BookingState {
+  switch (action.type) {
+    case 'inputUpdated':
+      const inputs = {
+        ...state.inputs,
+        ...action.inputs,
+      };
+      return {
+        ...state,
+        inputs,
+        status:
+          inputs.destination && inputs.startDate && inputs.endDate
+            ? 'searchingFlights'
+            : state.status,
+      };
+    
+    case 'flightsLoaded':
+      const cheapestFlight = action.flights.reduce((prev, current) =>
+        prev.price < current.price ? prev : current
+      );
+      
+      return {
+        ...state,
+        status: 'searchingHotels',
+        flights: action.flights,
+        selectedFlightId: cheapestFlight.id,
+      };
+    
+    case 'flightSelected':
+      return {
+        ...state,
+        selectedFlightId: action.flightId,
+      };
+    
+    case 'hotelsLoaded':
+      const bestHotel = action.hotels.reduce((prev, current) =>
+        prev.rating > current.rating ? prev : current
+      );
+      
+      return {
+        ...state,
+        status: 'idle',
+        hotels: action.hotels,
+        selectedHotelId: bestHotel.id,
+      };
+    
+    case 'hotelSelected':
+      return {
+        ...state,
+        selectedHotelId: action.hotelId,
+      };
+    
+    case 'error':
+      return {
+        ...state,
+        status: 'error',
+        error: action.error,
+      };
+    
+    default:
+      return state;
+  }
+}
+
 export default function TripSearch() {
-  // Input states
-  const [destination, setDestination] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [state, dispatch] = useReducer(tripSearchReducer, initialState);
 
-  // Search states
-  const [isSearchingFlights, setIsSearchingFlights] = useState(false);
-  const [isSearchingHotels, setIsSearchingHotels] = useState(false);
-  const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
-  const [selectedHotel, setSelectedHotel] = useState<Hotel | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  // Effect 1: Trigger flight search when inputs change
   useEffect(() => {
-    if (destination && startDate && endDate) {
-      setIsSearchingFlights(true);
-      setError(null);
+    const { destination, startDate, endDate } = state.inputs;
+    const { status } = state;
+
+    // Only proceed if we have all required inputs
+    if (!destination || !startDate || !endDate) return;
+
+    // Handle flight search
+    if (status === 'searchingFlights') {
+      const searchFlights = async () => {
+        try {
+          // Simulate API call
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          // Mock flight data
+          const flights: Flight[] = [
+            {
+              id: '1',
+              price: 299,
+              airline: 'Mock Airlines',
+              departureTime: '10:00 AM',
+              arrivalTime: '2:00 PM',
+            },
+            {
+              id: '2',
+              price: 399,
+              airline: 'Demo Airways',
+              departureTime: '2:00 PM',
+              arrivalTime: '6:00 PM',
+            },
+          ];
+
+          // Pick the cheapest flight
+          const bestFlight = flights.reduce((prev, current) =>
+            prev.price < current.price ? prev : current
+          );
+
+          dispatch({ type: 'flightsLoaded', flights: flights });
+        } catch {
+          dispatch({ type: 'error', error: 'Failed to search flights' });
+        }
+      };
+
+      searchFlights();
     }
-  }, [destination, startDate, endDate]);
 
-  // Effect 2: Simulate flight search
-  useEffect(() => {
-    if (!isSearchingFlights) return;
+    // Handle hotel search
+    if (status === 'searchingHotels') {
+      const searchHotels = async () => {
+        try {
+          // Simulate API call
+          await new Promise((resolve) => setTimeout(resolve, 1500));
 
-    const searchFlights = async () => {
-      try {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+          // Mock hotel data
+          const hotels: Hotel[] = [
+            {
+              id: '1',
+              name: 'Grand Hotel',
+              price: 150,
+              rating: 4.5,
+            },
+            {
+              id: '2',
+              name: 'Budget Inn',
+              price: 80,
+              rating: 3.8,
+            },
+          ];
 
-        // Mock flight data
-        const flights: Flight[] = [
-          {
-            id: '1',
-            price: 299,
-            airline: 'Mock Airlines',
-            departureTime: '10:00 AM',
-            arrivalTime: '2:00 PM',
-          },
-          {
-            id: '2',
-            price: 399,
-            airline: 'Demo Airways',
-            departureTime: '2:00 PM',
-            arrivalTime: '6:00 PM',
-          },
-        ];
+          // Pick the best rated hotel
+          const bestHotel = hotels.reduce((prev, current) =>
+            prev.rating > current.rating ? prev : current
+          );
 
-        // Pick the cheapest flight
-        const bestFlight = flights.reduce((prev, current) =>
-          prev.price < current.price ? prev : current
-        );
+          dispatch({ type: 'hotelsLoaded', hotels: hotels });
+        } catch {
+          dispatch({ type: 'error', error: 'Failed to search hotels' });
+        }
+      };
 
-        setSelectedFlight(bestFlight);
-        setIsSearchingFlights(false);
-      } catch {
-        setError('Failed to search flights');
-        setIsSearchingFlights(false);
-      }
-    };
-
-    searchFlights();
-  }, [isSearchingFlights]);
-
-  // Effect 3: Trigger hotel search when flight is selected
-  useEffect(() => {
-    if (selectedFlight) {
-      setIsSearchingHotels(true);
+      searchHotels();
     }
-  }, [selectedFlight]);
+  }, [state]);
 
-  // Effect 4: Simulate hotel search
-  useEffect(() => {
-    if (!isSearchingHotels) return;
-
-    const searchHotels = async () => {
-      try {
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-
-        // Mock hotel data
-        const hotels: Hotel[] = [
-          {
-            id: '1',
-            name: 'Grand Hotel',
-            price: 150,
-            rating: 4.5,
-          },
-          {
-            id: '2',
-            name: 'Budget Inn',
-            price: 80,
-            rating: 3.8,
-          },
-        ];
-
-        // Pick the best rated hotel
-        const bestHotel = hotels.reduce((prev, current) =>
-          prev.rating > current.rating ? prev : current
-        );
-
-        setSelectedHotel(bestHotel);
-        setIsSearchingHotels(false);
-      } catch {
-        setError('Failed to search hotels');
-        setIsSearchingHotels(false);
-      }
-    };
-
-    searchHotels();
-  }, [isSearchingHotels]);
+  const selectedFlight = state.flights.find((flight) => flight.id === state.selectedFlightId);
+  const selectedHotel = state.hotels.find((hotel) => hotel.id === state.selectedHotelId);
 
   return (
     <div className="p-8 w-full max-w-2xl mx-auto space-y-8">
@@ -143,7 +224,14 @@ export default function TripSearch() {
             <Label htmlFor="destination">Destination</Label>
             <Input
               id="destination"
-              onBlur={(e) => setDestination(e.target.value.trim())}
+              onBlur={(e) =>
+                dispatch({
+                  type: 'inputUpdated',
+                  inputs: {
+                    destination: e.target.value.trim(),
+                  },
+                })
+              }
               placeholder="Enter destination"
             />
           </div>
@@ -153,8 +241,15 @@ export default function TripSearch() {
             <Input
               id="startDate"
               type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              value={state.inputs.startDate}
+              onChange={(e) =>
+                dispatch({
+                  type: 'inputUpdated',
+                  inputs: {
+                    startDate: e.target.value,
+                  },
+                })
+              }
             />
           </div>
 
@@ -163,26 +258,35 @@ export default function TripSearch() {
             <Input
               id="endDate"
               type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              value={state.inputs.endDate}
+              onChange={(e) =>
+                dispatch({
+                  type: 'inputUpdated',
+                  inputs: {
+                    endDate: e.target.value,
+                  },
+                })
+              }
             />
           </div>
         </CardContent>
       </Card>
 
-      {error && (
+      {state.error && (
         <div className="p-4 bg-destructive/10 text-destructive rounded-md">
-          {error}
+          {state.error}
         </div>
       )}
 
       <div className="space-y-6">
-        <Card className={isSearchingFlights ? 'opacity-50' : ''}>
+        <Card
+          className={state.status === 'searchingFlights' ? 'opacity-50' : ''}
+        >
           <CardHeader>
             <CardTitle>Flight Search</CardTitle>
           </CardHeader>
           <CardContent>
-            {isSearchingFlights ? (
+            {state.status === 'searchingFlights' ? (
               <p>Searching for flights...</p>
             ) : selectedFlight ? (
               <div className="space-y-2">
@@ -198,14 +302,17 @@ export default function TripSearch() {
 
         <Card
           className={
-            isSearchingHotels || isSearchingFlights ? 'opacity-50' : ''
+            state.status === 'searchingHotels' ||
+              state.status === 'searchingFlights'
+              ? 'opacity-50'
+              : ''
           }
         >
           <CardHeader>
             <CardTitle>Hotel Search</CardTitle>
           </CardHeader>
           <CardContent>
-            {isSearchingHotels ? (
+            {state.status === 'searchingHotels' ? (
               <p>Searching for hotels...</p>
             ) : selectedHotel ? (
               <div className="space-y-2">
