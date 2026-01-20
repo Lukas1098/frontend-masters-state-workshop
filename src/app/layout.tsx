@@ -2,6 +2,7 @@ import { Noto_Sans } from 'next/font/google';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import './globals.css';
 import Link from 'next/link';
+import { TanstackQueryProvider } from '@/lib/tanstack-provider';
 
 const notoSans = Noto_Sans({
   weight: ['400', '500', '700', '900'],
@@ -88,7 +89,11 @@ export default function RootLayout({
               </div>
             </header>
             <div className="px-40 flex flex-1 justify-center py-5">
-              <NuqsAdapter>{children}</NuqsAdapter>
+              <NuqsAdapter>
+                <TanstackQueryProvider>
+                  {children}
+                </TanstackQueryProvider>
+              </NuqsAdapter>
             </div>
           </div>
         </div>

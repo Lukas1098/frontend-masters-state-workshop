@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { createContext, use, useReducer, useEffect, useState } from 'react';
-
+import { useQuery } from '@tanstack/react-query';
 import { fetchHotels } from './fetchHotels';
 import { fetchFlights } from './fetchFlights';
 
@@ -58,20 +58,20 @@ interface BookingState {
 
 type BookingAction =
   | {
-      type: 'flightSearchUpdated';
-      payload: Partial<BookingState['flightSearch']>;
-    }
+    type: 'flightSearchUpdated';
+    payload: Partial<BookingState['flightSearch']>;
+  }
   | {
-      type: 'flightSearchSubmitted';
-    }
+    type: 'flightSearchSubmitted';
+  }
   | { type: 'flightSelected'; flight: FlightOption | null }
   | {
-      type: 'hotelSearchUpdated';
-      payload: Partial<BookingState['hotelSearch']>;
-    }
+    type: 'hotelSearchUpdated';
+    payload: Partial<BookingState['hotelSearch']>;
+  }
   | {
-      type: 'hotelSearchSubmitted';
-    }
+    type: 'hotelSearchSubmitted';
+  }
   | { type: 'hotelSelected'; payload: HotelOption | null }
   | { type: 'RESET_HOTEL' }
   | { type: 'back' }
@@ -275,28 +275,12 @@ function FlightSearchResults() {
   const { state, dispatch } = use(BookingContext)!;
   const { selectedFlight, flightSearch } = state;
 
-  const [flights, setFlights] = useState<FlightOption[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadFlights = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const flightData = await fetchFlights(flightSearch);
-        setFlights(flightData);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : 'Failed to fetch flights'
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadFlights();
-  }, [flightSearch]);
+  const { data: flights, isLoading, error } = useQuery({
+    queryKey: ['flights', flightSearch],
+    queryFn: () => fetchFlights(flightSearch),
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+  });
 
   const handleSelectFlight = (flight: FlightOption) => {
     dispatch({ type: 'flightSelected', flight: flight });
@@ -313,7 +297,7 @@ function FlightSearchResults() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-48">
-        <div className="text-red-500">Error: {error}</div>
+        <div className="text-red-500">Error: {error.message}</div>
       </div>
     );
   }
@@ -331,11 +315,10 @@ function FlightSearchResults() {
         {flights?.map((flight) => (
           <div
             key={flight.id}
-            className={`p-4 border rounded hover:shadow-md ${
-              selectedFlight?.id === flight.id
+            className={`p-4 border rounded hover:shadow-md ${selectedFlight?.id === flight.id
                 ? 'border-blue-500 bg-blue-50'
                 : ''
-            }`}
+              }`}
           >
             <div className="flex justify-between items-center">
               <div>
@@ -452,26 +435,12 @@ function HotelSearchResults() {
   const { state, dispatch } = use(BookingContext)!;
   const { selectedHotel, hotelSearch } = state;
 
-  const [hotels, setHotels] = useState<HotelOption[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadHotels = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const hotelData = await fetchHotels(hotelSearch);
-        setHotels(hotelData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch hotels');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadHotels();
-  }, [hotelSearch]);
+  const { data: hotels, isLoading, error } = useQuery({
+    queryKey: ['hotels', hotelSearch],
+    queryFn: () => fetchHotels(hotelSearch),
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+  });
 
   const handleSelectHotel = (hotel: HotelOption) => {
     dispatch({ type: 'hotelSelected', payload: hotel });
@@ -488,7 +457,7 @@ function HotelSearchResults() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-48">
-        <div className="text-red-500">Error: {error}</div>
+        <div className="text-red-500">Error: {error.message}</div>
       </div>
     );
   }
@@ -506,9 +475,8 @@ function HotelSearchResults() {
         {hotels?.map((hotel) => (
           <div
             key={hotel.id}
-            className={`p-4 border rounded hover:shadow-md ${
-              selectedHotel?.id === hotel.id ? 'border-blue-500 bg-blue-50' : ''
-            }`}
+            className={`p-4 border rounded hover:shadow-md ${selectedHotel?.id === hotel.id ? 'border-blue-500 bg-blue-50' : ''
+              }`}
           >
             <div className="flex justify-between items-center">
               <div>

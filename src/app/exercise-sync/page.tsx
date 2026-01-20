@@ -13,19 +13,16 @@ import {
 } from '@/components/ui/table';
 import { Plane, Clock, MapPin } from 'lucide-react';
 import { Flight, FlightStatus, FlightStore } from './FlightStore';
+import { useSyncExternalStore } from 'react';
 
 const flightStore = new FlightStore();
 
 function useFlights() {
-  const [flights, setFlights] = useState<Flight[]>([]);
-
-  useEffect(() => {
-    flightStore.subscribe(() => {
-      setFlights(flightStore.getSnapshot());
-    });
-  }, []);
-
-  return flights;
+  return useSyncExternalStore(
+    flightStore.subscribe,
+    flightStore.getSnapshot,
+    flightStore.getSnapshot
+  );
 }
 
 function getStatusColor(status: FlightStatus) {
